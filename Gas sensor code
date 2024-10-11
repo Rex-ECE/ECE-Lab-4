@@ -1,0 +1,75 @@
+#include <msp430.h>
+
+unsigned int motion;
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;                                // Stop WDT
+
+    // Configure GPIO for the LED
+    P6DIR |= BIT3;                                           // Set P6.3 (LED) as output
+    P6OUT &= ~BIT3;                                          // Ensure P6.3 LED is off initially
+
+    // Configure P1.3 as ADC input (motion sensor)
+    P1SEL0 |= BIT3;
+    P1SEL1 |= BIT3;
+
+    // Disable the GPIO power-on default high-impedance mode
+    PM5CTL0 &= ~LOCKLPM5;
+
+    // Configure ADC12
+    ADCCTL0 |= ADCSHT_8 | ADCON;                             // ADCON, S&H=16 ADC clocks
+    ADCCTL1 |= ADCSHP;                                       // ADCCLK = MODOSC; sampling timer
+    ADCCTL2 &= ~ADCRES;                                      // Clear ADCRES in ADCCTL
+    ADCCTL2 |= ADCRES_2;                                     // 12-bit conversion results
+    ADCMCTL0 |= ADCSREF_0 | ADCINCH_3;                       // A3 ADC input select; Vref=AVCC
+
+    ADCIE |= ADCIE0;                                         // Enable ADC conversion complete interrupt
+
+    while(1)
+    {
+        ADCCTL0 |= ADCENC | ADCSC;                           // Sampling and conversion start
+        __bis_SR_register(LPM0_bits | GIE);                  // Enter LPM0, ADC_ISR will force exit
+        __no_operation();                                    // For debug only
+
+        if (motion < 200)
+            P6OUT |= BIT3;                                   // Turn on LED at P6.3 if motion is detected
+        else
+            P6OUT &= ~BIT3;                                  // Turn off LED at P6.3 if no motion
+
+        __delay_cycles(5000);                                // Short delay
+    }
+}
+
+// ADC interrupt service routine
+#if defined(__TI_COMPILER_VERSION__) || defined(__IAR_SYSTEMS_ICC__)
+#pragma vector=ADC_VECTOR
+__interrupt void ADC_ISR(void)
+#elif defined(__GNUC__)
+void __attribute__ ((interrupt(ADC_VECTOR))) ADC_ISR (void)
+#else
+#error Compiler not supported!
+#endif
+{
+    switch(__even_in_range(ADCIV,ADCIV_ADCIFG))
+    {
+        case ADCIV_NONE:
+            break;
+        case ADCIV_ADCOVIFG:
+            break;
+        case ADCIV_ADCTOVIFG:
+            break;
+        case ADCIV_ADCHIIFG:
+            break;
+        case ADCIV_ADCLOIFG:
+            break;
+        case ADCIV_ADCINIFG:
+            break;
+        case ADCIV_ADCIFG:
+            motion = ADCMEM0;                                 // Read ADC value
+            __bic_SR_register_on_exit(LPM0_bits);            // Clear CPUOFF bit from LPM0
+            break;
+        default:
+            break;
+    }
+}

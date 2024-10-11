@@ -1,0 +1,43 @@
+#include <msp430.h>
+
+int main(void)
+{
+    WDTCTL = WDTPW | WDTHOLD;                                // Stop WDT
+
+    // Configure GPIO
+    P6DIR |= BIT0;                                           // Set P6.0/LED to output direction
+    P6OUT &= ~BIT0;                                          // P6.0 LED off
+
+    // Configure P1.1 as input (for motion sensor)
+    P1DIR &= ~BIT1;                                          // Set P1.1 as input
+    P1REN |= BIT1;                                           // Enable pull-up/pull-down resistor
+    P1OUT |= BIT1;                                           // Select pull-up resistor
+
+    // Configure P1.6 as output (for buzzer)
+    P1DIR |= BIT6;                                           // Set P1.6 as output
+    P1SEL1 |= BIT6;                                          // Select timer function for P1.6
+
+    PM5CTL0 &= ~LOCKLPM5;                                    // Disable high-impedance mode
+
+    while(1)
+    {
+        // Check the status of P1.1 (motion sensor input)
+        if (!(P1IN & BIT1))                                  // If motion is detected (P1.1 goes low)
+        {
+            P6OUT |= BIT0;                                   // Turn on LED at P6.0
+
+            // Configure Timer B0 for PWM on P1.6 (buzzer)
+            TB0CCR0 = 128;                                   // PWM Period/2
+            TB0CCTL1 = OUTMOD_7;                             // TBCCR1 reset/set
+            TB0CCR1 = 64;                                    // TBCCR1 PWM duty cycle (50%)
+            TB0CTL = TBSSEL_1 | MC_1;                        // ACLK, up mode
+
+            __delay_cycles(500000);                          // Delay to keep the buzzer and LED on
+        }
+        else
+        {
+            P6OUT &= ~BIT0;                                  // Turn off LED
+            TB0CTL = MC_0;                                   // Stop the timer
+        }
+    }
+}
